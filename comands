@@ -1,0 +1,8 @@
+docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench /data/big_to_little_endian.s --isa acc32
+ЗАПУСТИТЬ
+
+docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench /data/big_to_little_endian.s --isa acc32 -c /data/conf.yaml
+C CONF
+
+
+docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench /data/big_to_little_endian_SHORTEST.s --isa acc32 -c /data/conf.yaml
