@@ -1,8 +1,14 @@
-docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench /data/big_to_little_endian.s --isa acc32
-ЗАПУСТИТЬ
+docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench
+/data/big_to_little_endian.s --isa acc32 ЗАПУСТИТЬ
 
-docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench /data/big_to_little_endian.s --isa acc32 -c /data/conf.yaml
-C CONF
+docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench
+/data/big_to_little_endian.s --isa acc32 -c /data/conf.yaml C CONF
 
+https://wrench.edu.swampbuds.me/report/88ca9dcd-02b3-4ff5-a377-7572a580660f
 
-docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench /data/big_to_little_endian_SHORTEST.s --isa acc32 -c /data/conf.yaml
+docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench /data/encodingFULLgemeni.s --isa m68k -c /data/conf.yaml
+
+docker run -it --rm -v $(pwd):/data ryukzak/wrench:latest wrench
+/data/big_to_little.s --isa risc-iv-32 -c /data/conf.yaml
+
+buffer:     .word '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'

@@ -1,0 +1,372 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.lab</groupId>
+    <artifactId>web-lab3</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <properties.file>build.properties</properties.file>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <!-- БАЗОВАЯ КОНФИГУРАЦИЯ -->
+    <build>
+        <plugins>
+            <!-- Добавление версии и Main-Class в MANIFEST.MF при упаковке (build) -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.lab.Main</mainClass>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+        </plugins>
+
+        <!-- Фиксируем версию antrun плагина для всех профилей -->
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-antrun-plugin</artifactId>
+                    <version>3.1.0</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
+
+    <!-- ПРОФИЛИ ДЛЯ СПЕЦИФИЧНЫХ ЗАДАЧ -->
+    <profiles>
+
+        <!-- 1. music: воспроизведение музыки по завершению сборки -->
+        <profile>
+            <id>music</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>verify</phase> <!-- Выполняется сразу после package -->
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <property file="${properties.file}"/>
+                                        <sound success="${music.file}" fail="${music.file}"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 2. xml: валидация xml-файлов -->
+        <profile>
+            <id>xml</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>validate</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <xmlvalidate failonerror="no" lenient="yes">
+                                            <fileset dir="${project.basedir}" includes="**/*.xml"/>
+                                        </xmlvalidate>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 3. doc: добавление MD5/SHA-1 в MANIFEST.MF и javadoc в архив -->
+        <profile>
+            <id>doc</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>verify</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <javadoc sourcepath="src/main/java" destdir="target/javadoc"/>
+                                        <checksum file="target/${project.build.finalName}.jar" algorithm="MD5" property="md5.sum"/>
+                                        <checksum file="target/${project.build.finalName}.jar" algorithm="SHA-1" property="sha1.sum"/>
+                                        <jar destfile="target/${project.build.finalName}.jar" update="true">
+                                            <manifest>
+                                                <attribute name="MD5-Checksum" value="${md5.sum}"/>
+                                                <attribute name="SHA1-Checksum" value="${sha1.sum}"/>
+                                            </manifest>
+                                            <zipfileset dir="target/javadoc" prefix="javadoc"/>
+                                        </jar>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 4. native2ascii: перекодировка файлов локализации -->
+        <profile>
+            <id>native2ascii</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>process-resources</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <native2ascii src="src/main/resources" dest="target/classes" includes="**/*.properties"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 5. scp: отправка проекта на сервер по scp -->
+        <profile>
+            <id>scp</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <dependencies>
+                            <dependency>
+                                <groupId>org.apache.ant</groupId>
+                                <artifactId>ant-jsch</artifactId>
+                                <version>1.10.14</version>
+                            </dependency>
+                        </dependencies>
+                        <executions>
+                            <execution>
+                                <phase>verify</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <property file="${properties.file}"/>
+                                        <scp file="target/${project.build.finalName}.jar"
+                                             todir="${scp.user}:${scp.pass}@${scp.host}:${scp.dir}"
+                                             trust="true"/>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 6. team: 3 ревизии SVN, сборка и архивация -->
+        <profile>
+            <id>team</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>validate</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <exec executable="bash" dir="${project.basedir}">
+                                            <arg value="-c"/>
+                                            <arg value="for i in 1 2 3; do svn up -r PREV; mvn package -DskipTests; cp target/*.jar target/rev-$i.jar; done; zip target/team-builds.zip target/rev-*.jar"/>
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 7. diff: проверка изменений git и автокоммит -->
+        <profile>
+            <id>diff</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>validate</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <property file="${properties.file}"/>
+                                        <exec executable="bash" dir="${project.basedir}">
+                                            <arg value="-c"/>
+                                            <arg value="if ! git diff --name-only | grep -q '${diff.ignore}'; then git commit -am 'Auto-commit from diff profile'; fi"/>
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 8. report: сохранение XML-отчета Junit в Git -->
+        <profile>
+            <id>report</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>verify</phase> <!-- После test -->
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <exec executable="git" dir="${project.basedir}"><arg line="add target/surefire-reports/*.xml"/></exec>
+                                        <exec executable="git" dir="${project.basedir}"><arg line="commit -m 'Add junit reports'"/></exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 9. env: сборка и запуск в альтернативном окружении -->
+        <profile>
+            <id>env</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>validate</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <property file="${properties.file}"/>
+                                        <exec executable="mvn"><arg value="package"/></exec>
+                                        <exec executable="${env.java.home}/bin/java">
+                                            <arg line="${env.java.args}"/>
+                                            <arg value="-jar"/>
+                                            <arg value="target/${project.build.finalName}.jar"/>
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 10. alt: замена имен, сборка альтернативной версии -->
+        <profile>
+            <id>alt</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>validate</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <property file="${properties.file}"/>
+                                        <copy todir="target/alt-src">
+                                            <fileset dir="${project.basedir}" excludes="target/**"/>
+                                        </copy>
+                                        <replaceregexp match="${alt.match}" replace="${alt.replace}" flags="g">
+                                            <fileset dir="target/alt-src/src/main/java" includes="**/*.java"/>
+                                        </replaceregexp>
+                                        <exec executable="mvn" dir="target/alt-src"><arg value="package"/></exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- 11. history: откат git до успешной компиляции -->
+        <profile>
+            <id>history</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <phase>validate</phase>
+                                <goals><goal>run</goal></goals>
+                                <configuration>
+                                    <target>
+                                        <exec executable="bash" dir="${project.basedir}">
+                                            <arg value="-c"/>
+                                            <arg value="while ! mvn compile; do if ! git checkout HEAD~1; then break; fi; done; git diff HEAD..HEAD@{1} > target/history_diff.txt"/>
+                                        </exec>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+    </profiles>
+</project>
