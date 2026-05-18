@@ -1,10 +1,10 @@
 # Execution limits
-limit: 1000 # Maximum instructions to execute
+limit: 2000 # Maximum instructions to execute
 memory_size: 8192 # Memory size in bytes
 
 # I/O configuration
 memory_mapped_io:
-  0x80: [ 81, 81, 61, 61, 10 ]
+  0x80: [ 0x12345678 ]
   0x84: [] # Output-only port at address 0x84
 
 # Reports configuration
@@ -19,4 +19,4 @@ reports:
     view: |
       numio[0x84]: {io:0x84:dec}
     assert: |
-      numio[0x84]: [] >>> [120]
+      numio[0x84]: [] >>> [0x78563412]

@@ -1,84 +1,58 @@
 .data
 .org 0x00
 buffer:     .word '\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0'
-
 .text
 .org 0x100
 _start:
-    movea.l 0x1000, A7     ; Инициализация указателя стека
-    movea.l 0, A0          ; A0 = указатель на буфер декодирования
-    movea.l 0x80, A1       ; A1 = порт ввода
-    movea.l 0x84, A2       ; A2 = порт вывода
-    clr.l D2               ; D2 = счетчик прочитанных символов (макс 64 символа)
-    clr.l D3               ; D3 = счетчик записанных байтов
+    movea.l 0x1000, A7     ; Инициализация стека
+
+    link A6, -32             ; Выделение памяти в стеке
+    move.l D0, -4(A6)
+    move.l D1, -8(A6)
+    move.l D2, -12(A6)
+    move.l D3, -16(A6)
+    move.l D4, -20(A6)
+    move.l D5, -24(A6)
+    move.l D6, -28(A6)
+    move.l D7, -32(A6)
+
+    movea.l 0, A0          ; A0 - адрес буфера
+    movea.l 0x80, A1       ; A1 - адрес ввода
+    movea.l 0x84, A2       ; A2 - адрес вывода
+    clr.l D2               ; D2 - счетчик считанных символов
+    clr.l D3               ; D3 - счетчик записанных байтов
 
 main_loop:
-    jsr process_chunk      ; Вызов вложенной процедуры (использует стек и фрейм)
+    jsr read_and_decode    ; чтение 1 символа
+    cmp.l -2, D0           ; если \n - конец ввода
+    beq finish
     cmp.l 0, D0
-    bgt main_loop          ; D0 > 0  -> продолжаем чтение
-    beq finish             ; D0 == 0 -> конец файла (\n)
-    halt                   ; D0 < 0  -> ошибка (остановка уже произошла внутри, но здесь fallback)
-
-; --- Вложенная процедура: читает и декодирует блок из 4 символов ---
-process_chunk:
-    link A6, 0             ; Инициализируем фрейм стека (требование по использованию стека)
-    
-    ; Чтение Символа 1 (C1)
-    cmp.l 64, D2
-    beq read_overflow
-    move.l (A1), D0
-    add.l 1, D2
-    cmp.l 10, D0
-    beq chunk_end_line     ; Если сразу \n - конец ввода
-    jsr decode_char
-    cmp.l 0, D0
-    blt invalid_err
+    blt invalid_err        ; проверка на ошибку
     move.l D0, D4
 
-    ; Чтение Символа 2 (C2)
-    cmp.l 64, D2
-    beq read_overflow
-    move.l (A1), D0
-    add.l 1, D2
-    cmp.l 10, D0
-    beq invalid_err        ; Ошибка формата (оборванный блок)
-    jsr decode_char
+    jsr read_and_decode    ; чтение 2 символа
     cmp.l 0, D0
-    blt invalid_err
+    blt invalid_err        ; проверка на ошибку
     move.l D0, D5
 
-    ; Чтение Символа 3 (C3)
-    cmp.l 64, D2
-    beq read_overflow
-    move.l (A1), D0
-    add.l 1, D2
-    cmp.l 10, D0
-    beq invalid_err
-    jsr decode_char
-    cmp.l -3, D0
+    jsr read_and_decode    ; чтение 2 символа
+    cmp.l -3, D0           ; проверка на =
     beq ok_c3
     cmp.l 0, D0
-    blt invalid_err
+    blt invalid_err        ; проверка на ошибку
 ok_c3:
     move.l D0, D6
 
-    ; Чтение Символа 4 (C4)
-    cmp.l 64, D2
-    beq read_overflow
-    move.l (A1), D0
-    add.l 1, D2
-    cmp.l 10, D0
-    beq invalid_err
-    jsr decode_char
+    jsr read_and_decode    ; чтение 4 символа
     cmp.l -3, D0
-    beq ok_c4
+    beq ok_c4              ; проверка на =
     cmp.l 0, D0
     blt invalid_err
 ok_c4:
     move.l D0, D7
 
-    ; Декодирование Байта 1
-    move.l D4, D0
+    
+    move.l D4, D0          ; запись 1 байта
     lsl.l 2, D0
     move.l D5, D1
     lsr.l 4, D1
@@ -87,10 +61,13 @@ ok_c4:
     add.l 1, D3
 
     cmp.l -3, D6
-    beq check_pad_1        ; Если C3 - это паддинг '='
+    bne decode_b2          
+    cmp.l -3, D7           ; если 3 символ это =, то 4 тоже должен быть =
+    bne invalid_err
+    jmp wait_nl
 
-    ; Декодирование Байта 2
-    move.l D5, D0
+decode_b2:
+    move.l D5, D0          ; запись 2 байта
     and.l 15, D0
     lsl.l 4, D0
     move.l D6, D1
@@ -100,115 +77,97 @@ ok_c4:
     add.l 1, D3
 
     cmp.l -3, D7
-    beq check_pad_2        ; Если C4 - это паддинг '='
+    beq wait_nl
 
-    ; Декодирование Байта 3
-    move.l D6, D0
+    move.l D6, D0          ; запись 3 байта
     and.l 3, D0
     lsl.l 6, D0
     or.l D7, D0
     move.b D0, (A0)+
     add.l 1, D3
 
-    move.l 1, D0           ; 1 = Статус "Продолжать"
-    unlk A6
-    rts
+    jmp main_loop
 
-chunk_end_line:
-    move.l 0, D0           ; 0 = Статус "Завершить"
-    unlk A6
-    rts
-
-check_pad_1:
-    cmp.l -3, D7
-    bne invalid_err        ; Если C3 '=', C4 тоже обязан быть '='
-    jmp wait_nl
-
-check_pad_2:
-wait_nl:
-    cmp.l 64, D2
-    beq read_overflow
-    move.l (A1), D0
-    add.l 1, D2
-    cmp.l 10, D0           ; После паддинга ожидается исключительно \n
-    beq chunk_end_line
+wait_nl:                   ; если был встречен символ =, то после него обязан быть \n или =\n
+    jsr read_and_decode
+    cmp.l -2, D0
+    beq finish
     jmp invalid_err
 
-; --- Блоки ошибок ---
-read_overflow:
-    unlk A6
-    move.l -858993460, D0  ; Спец значение переполнения [overflow_error_value]
+
+read_and_decode:
+    cmp.l 64, D2           ; проверка на переполнение
+    beq read_overflow
+    move.l (A1), D0        ; чтение символа
+    add.l 1, D2
+    cmp.l 10, D0
+    bne do_decode
+    move.l -2, D0          ; -2 код для перевода строки
+    rts
+
+do_decode:
+    cmp.l 65, D0
+    blt check_num_sym
+    cmp.l 90, D0
+    bgt check_lower
+    sub.l 65, D0           ; A-Z (0-25)
+    rts
+check_lower:
+    cmp.l 97, D0
+    blt err_ret
+    cmp.l 122, D0
+    bgt err_ret
+    sub.l 71, D0           ; a-z (26-51)
+    rts
+check_num_sym:
+    cmp.l 61, D0
+    bne try_num
+    move.l -3, D0          ; = (-3)
+    rts
+try_num:
+    cmp.l 48, D0
+    blt check_sym
+    cmp.l 57, D0
+    bgt err_ret
+    add.l 4, D0            ; 0-9 (52-61)
+    rts
+check_sym:
+    cmp.l 43, D0
+    bne try_slash
+    move.l 62, D0          ; + (62)
+    rts
+try_slash:
+    cmp.l 47, D0
+    bne err_ret
+    move.l 63, D0          ; / (63)
+    rts
+err_ret:
+    move.l -1, D0          ; ошибка
+    rts
+
+read_overflow:             
+    move.l -858993460, D0
     move.l D0, (A2)
-    halt                   ; Немедленно останавливаемся, не читая остаток!
+    jmp exit_program       ; переход к завершению программы
 
 invalid_err:
-    unlk A6
-invalid_flush:
     cmp.l 64, D2
     beq err_out
     move.l (A1), D0
     add.l 1, D2
-    cmp.l 10, D0           ; Читаем мусор до \n
-    beq err_out
-    jmp invalid_flush
+    cmp.l 10, D0           ; дочитывание до \n
+    bne invalid_err
 err_out:
     move.l -1, D0
-    move.l D0, (A2)        ; Отправляем ошибку формата
-    halt
+    move.l D0, (A2)
+    jmp exit_program       ; переход к завершению программы
 
-
-; --- Процедура декодирования (максимально оптимизирована, без фреймов) ---
-; Принимает D0 = ASCII. Возвращает D0 = Base64 (0..63) или ошибки (-3 = паддинг, -1 = формат)
-decode_char:
-    cmp.l 65, D0
-    blt c_below_A
-    cmp.l 90, D0
-    bgt c_lower
-    sub.l 65, D0           ; 'A'-'Z' (0-25)
-    rts
-c_lower:
-    cmp.l 97, D0
-    blt c_err
-    cmp.l 122, D0
-    bgt c_err
-    sub.l 71, D0           ; 'a'-'z' (26-51)
-    rts
-c_below_A:
-    cmp.l 61, D0
-    beq c_pad              ; '=' (-3)
-    cmp.l 48, D0
-    blt c_sym
-    cmp.l 57, D0
-    bgt c_err
-    add.l 4, D0            ; '0'-'9' (52-61)
-    rts
-c_sym:
-    cmp.l 43, D0
-    beq c_plus             ; '+' (62)
-    cmp.l 47, D0
-    beq c_slash            ; '/' (63)
-    jmp c_err
-c_plus:
-    move.l 62, D0
-    rts
-c_slash:
-    move.l 63, D0
-    rts
-c_pad:
-    move.l -3, D0
-    rts
-c_err:
-    move.l -1, D0
-    rts
-
-
-; --- Успешное завершение ---
 finish:
     clr.b D0
-    move.b D0, (A0)        ; Устанавливаем нуль-терминатор для C-строки в памяти (по правилам!)
+    move.b D0, (A0)        ; ставим \0 символ в конец строки
     
     movea.l 0, A0
-    move.l D3, D1          ; D1 = сколько байт выдаем в порт (без \0)
+    move.l D3, D1
     cmp.l 0, D1
     beq finish_end
 output_loop:
@@ -218,4 +177,16 @@ output_loop:
     sub.l 1, D1
     bne output_loop
 finish_end:
+    jmp exit_program
+
+exit_program:              ; точка выхода
+    move.l -4(A6), D0
+    move.l -8(A6), D1
+    move.l -12(A6), D2
+    move.l -16(A6), D3
+    move.l -20(A6), D4
+    move.l -24(A6), D5
+    move.l -28(A6), D6
+    move.l -32(A6), D7
+    unlk A6
     halt
